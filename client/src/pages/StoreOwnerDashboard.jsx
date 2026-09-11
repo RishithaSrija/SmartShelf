@@ -294,9 +294,10 @@ function StoreOwnerDashboard() {
                     label="Store Phone"
                     type="tel"
                     icon={Phone}
+                    prefix="+91"
                     value={createData.phone}
                     onChange={(e) => setCreateData({ ...createData, phone: e.target.value })}
-                    placeholder="9876543210"
+                    placeholder="Enter store phone number"
                   />
 
                   <Input

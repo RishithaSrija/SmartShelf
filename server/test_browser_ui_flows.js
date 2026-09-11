@@ -195,7 +195,7 @@ async function runBrowserVerification() {
     }
 
     await Promise.all([
-      clickByText('Create Account') || clickByText('Register') || clickByText('Sign Up') || page.click('button[type="submit"]'),
+      page.click('button[type="submit"]'),
       page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 8000 }).catch(() => {})
     ]);
     await new Promise(r => setTimeout(r, 1000));
