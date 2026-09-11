@@ -1,0 +1,27 @@
+{
+  "modelVersion": "1.0",
+  "modelType": "RandomForestRegressor",
+  "trainedAt": "2026-08-30T18:45:13.263485",
+  "trainingRows": 2316,
+  "testRows": 580,
+  "featureNames": [
+    "dayOfWeek",
+    "dayOfMonth",
+    "month",
+    "isWeekend",
+    "categoryEncoded",
+    "lag_1",
+    "lag_7",
+    "rollingMean_7",
+    "rollingMean_14"
+  ],
+  "metrics": {
+    "mae": 2.57,
+    "rmse": 3.26,
+    "r2": 0.7928,
+    "baseline_mae": 6.51,
+    "baseline_rmse": 7.84,
+    "baseline_r2": -0.1996,
+    "mae_improvement_pct": 60.5
+  }
+}
