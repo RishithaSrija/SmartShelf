@@ -12,6 +12,7 @@ import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Skeleton from '../../components/ui/Skeleton';
+import ProductImage from '../../components/common/ProductImage';
 import { useToast } from '../../components/ui/Toast';
 
 // Icons
@@ -128,12 +129,14 @@ function ProductDetails() {
             {/* Main Product Card */}
             <Card padding="p-6 sm:p-8" className="lg:col-span-2 space-y-6">
               <div className="flex flex-col sm:flex-row items-start gap-6 border-b border-[#E5E7EB] pb-6">
-                <div className="w-28 h-28 rounded-2xl bg-slate-100 border border-[#E5E7EB] flex items-center justify-center shrink-0 overflow-hidden text-slate-400">
-                  {product.image ? (
-                    <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <ImageIcon className="w-10 h-10" />
-                  )}
+                <div className="w-28 h-28 rounded-2xl border border-[#E5E7EB] shrink-0 overflow-hidden shadow-xs">
+                  <ProductImage
+                    src={product.imageUrl || product.image}
+                    alt={product.name}
+                    category={product.category}
+                    aspectRatio="square"
+                    className="w-full h-full"
+                  />
                 </div>
 
                 <div className="space-y-2 flex-1">

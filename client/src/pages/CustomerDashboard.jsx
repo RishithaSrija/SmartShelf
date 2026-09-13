@@ -9,6 +9,7 @@ import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
 import Skeleton from '../components/ui/Skeleton';
 import LocationSelectorModal from '../components/common/LocationSelectorModal';
+import ProductImage from '../components/common/ProductImage';
 import {
   Search,
   MapPin,
@@ -55,6 +56,7 @@ function CustomerDashboard() {
   const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const [activeFilterTab, setActiveFilterTab] = useState('ALL'); // 'ALL' | 'EXPIRING_SOON' | 'FRESH_PICKS'
   const [searchQuery, setSearchQuery] = useState('');
 
   // Fetch real flash sales from backend
@@ -65,7 +67,7 @@ function CustomerDashboard() {
       if (isLocationSet && latitude && longitude) {
         res = await flashSaleService.getNearbyFlashSales(latitude, longitude, radius || 5);
       } else {
-        res = await flashSaleService.getPublicFlashSales({ limit: 8 });
+        res = await flashSaleService.getPublicFlashSales({ limit: 16 });
       }
 
       if (res.success && res.data) {
@@ -116,14 +118,22 @@ function CustomerDashboard() {
 
   // Filter deals
   const filteredDeals = sales.filter((deal) => {
-    const productCat = deal.productId?.category || deal.category || 'OTHER';
+    const productCat = (deal.productId?.category || deal.category || 'OTHER').toUpperCase();
     const matchesCat = selectedCategory === 'ALL' || productCat === selectedCategory;
     const pName = deal.productId?.name || deal.productName || deal.title || '';
     const sName = deal.storeId?.name || deal.storeName || '';
     const matchesSearch =
       pName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       sName.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCat && matchesSearch;
+
+    let matchesTab = true;
+    if (activeFilterTab === 'EXPIRING_SOON') {
+      matchesTab = (deal.discountPercentage >= 35 || (deal.daysRemaining !== undefined && deal.daysRemaining <= 1));
+    } else if (activeFilterTab === 'FRESH_PICKS') {
+      matchesTab = ['DAIRY', 'FRUITS', 'VEGETABLES', 'BAKERY'].includes(productCat);
+    }
+
+    return matchesCat && matchesSearch && matchesTab;
   });
 
   return (
@@ -337,6 +347,42 @@ function CustomerDashboard() {
           </div>
         </div>
 
+        {/* Dynamic Section Tabs (Featured / Expiring Soon / Fresh Picks) */}
+        <div className="flex items-center gap-2 border-b border-[#E5E7EB] pb-2 text-xs">
+          <button
+            onClick={() => setActiveFilterTab('ALL')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+              activeFilterTab === 'ALL'
+                ? 'bg-[#15803D] text-white shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            All Live Deals
+          </button>
+          <button
+            onClick={() => setActiveFilterTab('EXPIRING_SOON')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeFilterTab === 'EXPIRING_SOON'
+                ? 'bg-rose-600 text-white shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Clock3 className="w-3.5 h-3.5" />
+            <span>Expiring Soon (Max Savings)</span>
+          </button>
+          <button
+            onClick={() => setActiveFilterTab('FRESH_PICKS')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeFilterTab === 'FRESH_PICKS'
+                ? 'bg-emerald-600 text-white shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Fresh Picks (Bakery & Produce)</span>
+          </button>
+        </div>
+
         {/* Flash Sale Cards Grid */}
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -376,10 +422,19 @@ function CustomerDashboard() {
                   padding="p-0"
                   className="overflow-hidden flex flex-col justify-between border border-[#E5E7EB] bg-white shadow-xs hover:shadow-md transition-all group"
                 >
-                  {/* Top Graphic Card Header with Deal Badge */}
-                  <div className="h-44 bg-gradient-to-br from-emerald-50 via-slate-50 to-amber-50/50 p-4 relative flex flex-col justify-between border-b border-[#E5E7EB]/60">
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#0A4D2E] bg-white/90 backdrop-blur-xs px-2.5 py-1 rounded-lg border border-emerald-200/60 shadow-2xs">
+                  {/* Top Product Image Card Header with Deal Badge */}
+                  <div className="relative h-48 w-full bg-slate-100 overflow-hidden border-b border-[#E5E7EB]/60">
+                    <ProductImage
+                      src={product.imageUrl || product.image || deal.image}
+                      alt={productName}
+                      category={category}
+                      aspectRatio="wide"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+
+                    {/* Floating Badges */}
+                    <div className="absolute top-3 inset-x-3 flex items-start justify-between gap-2 pointer-events-none">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#0A4D2E] bg-white/95 backdrop-blur-xs px-2.5 py-1 rounded-lg border border-emerald-200/80 shadow-xs">
                         {category}
                       </span>
                       <span className="px-2.5 py-1 rounded-full text-xs font-black bg-[#D97706] text-white shadow-xs flex items-center gap-1">
@@ -388,7 +443,8 @@ function CustomerDashboard() {
                       </span>
                     </div>
 
-                    <div className="bg-white/95 backdrop-blur-xs p-3 rounded-xl border border-white/80 shadow-xs">
+                    {/* Product & Store Name Overlay */}
+                    <div className="absolute bottom-2.5 inset-x-2.5 bg-white/95 backdrop-blur-xs p-2.5 rounded-xl border border-white/80 shadow-xs">
                       <p className="text-xs font-black text-[#1F2937] truncate group-hover:text-[#15803D] transition-colors">
                         {productName}
                       </p>

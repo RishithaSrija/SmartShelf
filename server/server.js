@@ -14,6 +14,7 @@ const flashSaleRoutes = require('./routes/flashSaleRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const mlRoutes = require('./routes/mlRoutes');
+const uploadRoutes = require('./routes/uploadRoutes');
 
 const { startExpiryJob } = require('./jobs/expiryJob');
 const { startReservationJob } = require('./jobs/reservationJob');
@@ -55,6 +56,7 @@ app.use('/api/flash-sales', flashSaleRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/ml', mlRoutes);
+app.use('/api/upload', uploadRoutes);
 
 // Health Check Endpoint
 app.get('/api/health', (req, res) => {

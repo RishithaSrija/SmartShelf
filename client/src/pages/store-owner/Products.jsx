@@ -18,6 +18,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import Skeleton from '../../components/ui/Skeleton';
 import Modal from '../../components/ui/Modal';
 import { useToast } from '../../components/ui/Toast';
+import ProductImage from '../../components/common/ProductImage';
 
 // Icons
 import {
@@ -319,20 +320,14 @@ function Products() {
                     {products.map((item) => (
                       <tr key={item._id} className="hover:bg-slate-50/80 transition-colors">
                         <td className="py-3.5 px-4 font-bold flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 overflow-hidden text-slate-400">
-                            {item.image ? (
-                              <img
-                                src={item.image}
-                                alt={item.name}
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                  e.target.onerror = null;
-                                  e.target.style.display = 'none';
-                                }}
-                              />
-                            ) : (
-                              <ImageIcon className="w-4 h-4" />
-                            )}
+                          <div className="w-10 h-10 rounded-xl border border-slate-200 shrink-0 overflow-hidden">
+                            <ProductImage
+                              src={item.imageUrl || item.image}
+                              alt={item.name}
+                              category={item.category}
+                              aspectRatio="square"
+                              className="w-full h-full"
+                            />
                           </div>
                           <div>
                             <p className="text-sm font-extrabold text-[#1F2937] leading-tight">{item.name}</p>
@@ -405,12 +400,14 @@ function Products() {
                   <div key={item._id} className="p-4 space-y-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 text-slate-400">
-                          {item.image ? (
-                            <img src={item.image} alt={item.name} className="w-full h-full object-cover rounded-xl" />
-                          ) : (
-                            <ImageIcon className="w-4 h-4" />
-                          )}
+                        <div className="w-12 h-12 rounded-xl border border-slate-200 shrink-0 overflow-hidden">
+                          <ProductImage
+                            src={item.imageUrl || item.image}
+                            alt={item.name}
+                            category={item.category}
+                            aspectRatio="square"
+                            className="w-full h-full"
+                          />
                         </div>
                         <div>
                           <h4 className="font-extrabold text-sm text-[#1F2937]">{item.name}</h4>

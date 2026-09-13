@@ -47,6 +47,20 @@ const productSchema = new mongoose.Schema(
       type: String,
       trim: true
     },
+    imageUrl: {
+      type: String,
+      trim: true
+    },
+    imagePublicId: {
+      type: String,
+      trim: true
+    },
+    additionalImages: [
+      {
+        imageUrl: { type: String, trim: true },
+        imagePublicId: { type: String, trim: true }
+      }
+    ],
     unit: {
       type: String,
       required: [true, 'Product unit is required'],
@@ -82,11 +96,19 @@ const productSchema = new mongoose.Schema(
   }
 );
 
-// Pre-save hook to generate normalizedName for store-scoped uniqueness
+// Pre-save hook to generate normalizedName and sync image fields
 productSchema.pre('save', function (next) {
   if (this.name) {
     this.normalizedName = this.name.toLowerCase().trim();
   }
+
+  // Ensure bidirectional synchronization between image and imageUrl
+  if (this.imageUrl && !this.image) {
+    this.image = this.imageUrl;
+  } else if (this.image && !this.imageUrl) {
+    this.imageUrl = this.image;
+  }
+
   next();
 });
 

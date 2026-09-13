@@ -1,4 +1,5 @@
 const Store = require('../models/Store');
+const { deleteImage } = require('../config/cloudinary');
 
 // @desc    Create a new store for logged-in store owner
 // @route   POST /api/stores
@@ -14,7 +15,9 @@ const createStore = async (req, res) => {
       businessType,
       openingHours,
       latitude,
-      longitude
+      longitude,
+      imageUrl,
+      imagePublicId
     } = req.body;
 
     // Validation
@@ -84,6 +87,8 @@ const createStore = async (req, res) => {
       businessType: businessType.toUpperCase(),
       openingHours: openingHours ? openingHours.trim() : '',
       location: locationObj,
+      imageUrl: imageUrl ? imageUrl.trim() : undefined,
+      imagePublicId: imagePublicId ? imagePublicId.trim() : undefined,
       isActive: true
     });
 
@@ -185,7 +190,9 @@ const updateStore = async (req, res) => {
       businessType,
       openingHours,
       latitude,
-      longitude
+      longitude,
+      imageUrl,
+      imagePublicId
     } = req.body;
 
     if (name !== undefined) store.name = name.trim();
@@ -194,6 +201,23 @@ const updateStore = async (req, res) => {
     if (email !== undefined) store.email = email.trim().toLowerCase();
     if (address !== undefined) store.address = address.trim();
     if (openingHours !== undefined) store.openingHours = openingHours.trim();
+
+    // Store Image replacement and cleanup
+    if (imageUrl !== undefined) {
+      if (
+        store.imagePublicId &&
+        imagePublicId &&
+        store.imagePublicId !== imagePublicId
+      ) {
+        deleteImage(store.imagePublicId).catch((err) => {
+          console.warn('[StoreController] Could not delete old store image:', err.message);
+        });
+      }
+      store.imageUrl = imageUrl.trim();
+    }
+    if (imagePublicId !== undefined) {
+      store.imagePublicId = imagePublicId ? imagePublicId.trim() : undefined;
+    }
 
     if (businessType) {
       const validBusinessTypes = ['GROCERY', 'BAKERY', 'RESTAURANT', 'SUPERMARKET', 'OTHER'];

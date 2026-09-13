@@ -6,6 +6,7 @@ import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Skeleton from '../../components/ui/Skeleton';
+import ProductImage from '../../components/common/ProductImage';
 import { useToast } from '../../components/ui/Toast';
 import {
   CheckCircle2,
@@ -188,17 +189,15 @@ function ReservationSuccess() {
 
           {/* Reserved Item Summary */}
           <div className="flex items-start gap-4">
-            {order.productId?.image ? (
-              <img
-                src={order.productId.image}
+            <div className="w-16 h-16 rounded-xl border border-slate-200 overflow-hidden shrink-0">
+              <ProductImage
+                src={order.productId?.imageUrl || order.productId?.image}
                 alt={order.productName}
-                className="w-16 h-16 rounded-xl object-cover border border-slate-200 shrink-0"
+                category={order.productId?.category}
+                aspectRatio="square"
+                className="w-full h-full"
               />
-            ) : (
-              <div className="w-16 h-16 rounded-xl bg-slate-100 flex items-center justify-center text-emerald-600 shrink-0">
-                <Receipt className="w-8 h-8" />
-              </div>
-            )}
+            </div>
 
             <div className="flex-1 min-w-0">
               <h3 className="font-extrabold text-sm text-[#1F2937] truncate">

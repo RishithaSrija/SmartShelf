@@ -1,6 +1,7 @@
 const Product = require('../models/Product');
 const Store = require('../models/Store');
 const InventoryBatch = require('../models/InventoryBatch');
+const { deleteImage } = require('../config/cloudinary');
 
 // Helper to get authenticated store owner's store
 const getOwnerStore = async (ownerId) => {
@@ -18,7 +19,17 @@ const productService = {
   createProduct: async (ownerId, productData) => {
     const store = await getOwnerStore(ownerId);
 
-    const { name, category, description, brand, unit, image } = productData;
+    const {
+      name,
+      category,
+      description,
+      brand,
+      unit,
+      image,
+      imageUrl,
+      imagePublicId,
+      additionalImages
+    } = productData;
 
     const normalizedName = name.toLowerCase().trim();
 
@@ -34,6 +45,8 @@ const productService = {
       throw error;
     }
 
+    const resolvedImage = imageUrl ? imageUrl.trim() : (image ? image.trim() : '');
+
     const product = await Product.create({
       name: name.trim(),
       normalizedName,
@@ -41,7 +54,10 @@ const productService = {
       description: description ? description.trim() : '',
       brand: brand ? brand.trim() : '',
       unit: unit ? unit.trim() : 'piece',
-      image: image ? image.trim() : '',
+      image: resolvedImage,
+      imageUrl: resolvedImage,
+      imagePublicId: imagePublicId ? imagePublicId.trim() : undefined,
+      additionalImages: Array.isArray(additionalImages) ? additionalImages : [],
       storeId: store._id,
       isActive: true
     });
@@ -149,7 +165,17 @@ const productService = {
       throw error;
     }
 
-    const { name, category, description, brand, unit, image } = updateData;
+    const {
+      name,
+      category,
+      description,
+      brand,
+      unit,
+      image,
+      imageUrl,
+      imagePublicId,
+      additionalImages
+    } = updateData;
 
     if (name && name.trim()) {
       const newNormalizedName = name.toLowerCase().trim();
@@ -174,7 +200,33 @@ const productService = {
     if (description !== undefined) product.description = description.trim();
     if (brand !== undefined) product.brand = brand.trim();
     if (unit) product.unit = unit.trim();
-    if (image !== undefined) product.image = image.trim();
+
+    // Check if image is being replaced
+    const newImageUrl = imageUrl !== undefined ? imageUrl.trim() : (image !== undefined ? image.trim() : undefined);
+    if (newImageUrl !== undefined) {
+      // If replacing an existing Cloudinary image with a different one, delete the old Cloudinary asset
+      if (
+        product.imagePublicId &&
+        imagePublicId &&
+        product.imagePublicId !== imagePublicId
+      ) {
+        // Async cleanup (non-blocking)
+        deleteImage(product.imagePublicId).catch((err) => {
+          console.warn('[ProductService] Could not delete old Cloudinary image:', err.message);
+        });
+      }
+
+      product.image = newImageUrl;
+      product.imageUrl = newImageUrl;
+    }
+
+    if (imagePublicId !== undefined) {
+      product.imagePublicId = imagePublicId ? imagePublicId.trim() : undefined;
+    }
+
+    if (additionalImages !== undefined && Array.isArray(additionalImages)) {
+      product.additionalImages = additionalImages;
+    }
 
     const updatedProduct = await product.save();
     return updatedProduct;
@@ -215,6 +267,22 @@ const productService = {
       );
       error.statusCode = 400;
       throw error;
+    }
+
+    // Delete associated Cloudinary image if it exists
+    if (product.imagePublicId) {
+      deleteImage(product.imagePublicId).catch((err) => {
+        console.warn('[ProductService] Could not delete Cloudinary image on product deletion:', err.message);
+      });
+    }
+
+    // Also delete any additional images
+    if (product.additionalImages && product.additionalImages.length > 0) {
+      product.additionalImages.forEach((img) => {
+        if (img.imagePublicId) {
+          deleteImage(img.imagePublicId).catch(() => {});
+        }
+      });
     }
 
     await Product.findByIdAndDelete(productId);

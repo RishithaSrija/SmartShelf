@@ -11,6 +11,7 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Skeleton from '../../components/ui/Skeleton';
 import { useToast } from '../../components/ui/Toast';
+import ProductImage from '../../components/common/ProductImage';
 
 // Icons
 import {
@@ -163,22 +164,20 @@ function FlashSaleDetails() {
             {/* Left Col: Image & Deal Overview */}
             <div className="lg:col-span-2 space-y-6">
               <Card padding="p-0" className="overflow-hidden">
-                <div className="relative h-72 sm:h-96 bg-slate-100 flex items-center justify-center">
-                  {deal.productId?.image ? (
-                    <img
-                      src={deal.productId.image}
-                      alt={deal.productId?.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <Zap className="w-20 h-20 text-emerald-600/30" />
-                  )}
+                <div className="relative h-72 sm:h-96 bg-slate-100 flex items-center justify-center overflow-hidden">
+                  <ProductImage
+                    src={deal.productId?.imageUrl || deal.productId?.image}
+                    alt={deal.productId?.name}
+                    category={deal.productId?.category}
+                    aspectRatio="wide"
+                    className="w-full h-full object-cover"
+                  />
 
-                  <div className="absolute top-4 left-4 bg-[#2E7D32] text-white text-xs font-black uppercase px-3 py-1 rounded-xl shadow-lg border border-emerald-400">
+                  <div className="absolute top-4 left-4 bg-[#2E7D32] text-white text-xs font-black uppercase px-3 py-1 rounded-xl shadow-lg border border-emerald-400 z-10">
                     {deal.discountPercentage}% OFF
                   </div>
 
-                  <div className="absolute bottom-4 right-4 bg-slate-900/80 backdrop-blur-xs text-white text-xs font-bold px-3 py-1 rounded-xl flex items-center gap-1.5">
+                  <div className="absolute bottom-4 right-4 bg-slate-900/80 backdrop-blur-xs text-white text-xs font-bold px-3 py-1 rounded-xl flex items-center gap-1.5 z-10">
                     <Clock className="w-4 h-4 text-amber-400" />
                     <span>{deal.daysRemaining === 0 ? 'Expires Today' : `${deal.daysRemaining} days remaining`}</span>
                   </div>
@@ -329,17 +328,15 @@ function FlashSaleDetails() {
 
               {/* Product Brief */}
               <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center gap-3">
-                {deal.productId?.image ? (
-                  <img
-                    src={deal.productId.image}
+                <div className="w-12 h-12 rounded-lg overflow-hidden border border-slate-200 shrink-0">
+                  <ProductImage
+                    src={deal.productId?.imageUrl || deal.productId?.image}
                     alt={deal.productName}
-                    className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0"
+                    category={deal.productId?.category}
+                    aspectRatio="square"
+                    className="w-full h-full"
                   />
-                ) : (
-                  <div className="w-12 h-12 rounded-lg bg-emerald-100 text-[#2E7D32] flex items-center justify-center shrink-0">
-                    <Zap className="w-6 h-6" />
-                  </div>
-                )}
+                </div>
                 <div className="flex-1 min-w-0">
                   <h4 className="text-xs font-bold text-[#1F2937] truncate">{deal.title}</h4>
                   <p className="text-[11px] text-[#6B7280] truncate">{deal.storeId?.name}</p>

@@ -13,6 +13,7 @@ import Badge from '../../components/ui/Badge';
 import Skeleton from '../../components/ui/Skeleton';
 import EmptyState from '../../components/ui/EmptyState';
 import LocationSelectorModal from '../../components/common/LocationSelectorModal';
+import ProductImage from '../../components/common/ProductImage';
 import { useToast } from '../../components/ui/Toast';
 
 // Icons
@@ -481,22 +482,20 @@ function Marketplace() {
                 >
                   <div>
                     {/* Card Image & Discount Badge Overlay */}
-                    <div className="relative h-44 bg-slate-100 flex items-center justify-center overflow-hidden">
-                      {deal.product?.image ? (
-                        <img
-                          src={deal.product.image}
-                          alt={productName}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        />
-                      ) : (
-                        <Zap className="w-12 h-12 text-emerald-600/30" />
-                      )}
+                    <div className="relative h-48 bg-slate-100 flex items-center justify-center overflow-hidden">
+                      <ProductImage
+                        src={deal.product?.imageUrl || deal.product?.image}
+                        alt={productName}
+                        category={deal.product?.category}
+                        aspectRatio="wide"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
 
-                      <div className="absolute top-3 left-3 bg-[#2E7D32] text-white text-[11px] font-black uppercase px-2.5 py-1 rounded-lg shadow-md border border-emerald-400">
+                      <div className="absolute top-3 left-3 bg-[#2E7D32] text-white text-[11px] font-black uppercase px-2.5 py-1 rounded-lg shadow-md border border-emerald-400 z-10">
                         {deal.discountPercentage}% OFF
                       </div>
 
-                      <div className="absolute bottom-2 right-2 bg-slate-900/80 backdrop-blur-xs text-white text-[10px] font-extrabold px-2 py-0.5 rounded-md flex items-center gap-1">
+                      <div className="absolute bottom-2 right-2 bg-slate-900/80 backdrop-blur-xs text-white text-[10px] font-extrabold px-2 py-0.5 rounded-md flex items-center gap-1 z-10">
                         <Clock className="w-3 h-3 text-amber-400" />
                         <span>
                           {deal.daysRemaining === 0 ? 'Expires today' : deal.daysRemaining === 1 ? 'Expires tomorrow' : `${deal.daysRemaining} days left`}

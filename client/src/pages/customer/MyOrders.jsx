@@ -10,6 +10,7 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Skeleton from '../../components/ui/Skeleton';
 import EmptyState from '../../components/ui/EmptyState';
+import ProductImage from '../../components/common/ProductImage';
 import { useToast } from '../../components/ui/Toast';
 
 // Icons
@@ -202,17 +203,15 @@ function MyOrders() {
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   {/* Item Details */}
                   <div className="flex items-start gap-4 flex-1 min-w-0">
-                    {ord.productId?.image ? (
-                      <img
-                        src={ord.productId.image}
+                    <div className="w-16 h-16 rounded-xl border border-slate-200 overflow-hidden shrink-0">
+                      <ProductImage
+                        src={ord.productId?.imageUrl || ord.productId?.image}
                         alt={ord.productName}
-                        className="w-16 h-16 rounded-xl object-cover border border-slate-200 shrink-0"
+                        category={ord.productId?.category}
+                        aspectRatio="square"
+                        className="w-full h-full"
                       />
-                    ) : (
-                      <div className="w-16 h-16 rounded-xl bg-emerald-50 text-[#2E7D32] flex items-center justify-center font-bold shrink-0 border border-emerald-200">
-                        <ShoppingBag className="w-6 h-6" />
-                      </div>
-                    )}
+                    </div>
 
                     <div className="flex-1 min-w-0 space-y-1">
                       <div className="flex flex-wrap items-center gap-2">

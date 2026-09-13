@@ -14,6 +14,9 @@ import Select from '../../components/ui/Select';
 import Skeleton from '../../components/ui/Skeleton';
 import { useToast } from '../../components/ui/Toast';
 
+import uploadService from '../../services/uploadService';
+import ProductImage from '../../components/common/ProductImage';
+
 // Icons
 import {
   Package,
@@ -24,7 +27,10 @@ import {
   Image as ImageIcon,
   CheckCircle2,
   Tag,
-  Building
+  Building,
+  Upload,
+  X,
+  Loader2
 } from 'lucide-react';
 
 const categoryOptions = [
@@ -64,8 +70,12 @@ function ProductForm() {
     brand: '',
     unit: 'piece',
     description: '',
-    image: ''
+    image: '',
+    imageUrl: '',
+    imagePublicId: ''
   });
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imagePreview, setImagePreview] = useState('');
   const [loading, setLoading] = useState(isEditMode);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -95,8 +105,11 @@ function ProductForm() {
               brand: p.brand || '',
               unit: p.unit || 'piece',
               description: p.description || '',
-              image: p.image || ''
+              image: p.imageUrl || p.image || '',
+              imageUrl: p.imageUrl || p.image || '',
+              imagePublicId: p.imagePublicId || ''
             });
+            setImagePreview(p.imageUrl || p.image || '');
           }
         })
         .catch((err) => {
@@ -109,10 +122,57 @@ function ProductForm() {
   }, [id, isEditMode, addToast]);
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+      ...(name === 'image' ? { imageUrl: value } : {})
+    }));
+    if (name === 'image') {
+      setImagePreview(value);
+    }
+  };
+
+  const handleFileSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      addToast('File size exceeds 5MB limit.', 'error');
+      return;
+    }
+
+    const localUrl = URL.createObjectURL(file);
+    setImagePreview(localUrl);
+
+    try {
+      setUploadingImage(true);
+      const res = await uploadService.uploadImage(file, 'smartshelf/products');
+      if (res.success && res.data) {
+        setFormData((prev) => ({
+          ...prev,
+          image: res.data.imageUrl,
+          imageUrl: res.data.imageUrl,
+          imagePublicId: res.data.imagePublicId || ''
+        }));
+        addToast('Product image uploaded successfully!', 'success');
+      }
+    } catch (err) {
+      console.error('[ProductForm] Image upload failed:', err);
+      addToast(err.response?.data?.message || 'Image upload failed.', 'error');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setImagePreview('');
+    setFormData((prev) => ({
+      ...prev,
+      image: '',
+      imageUrl: '',
+      imagePublicId: ''
+    }));
   };
 
   const handleSubmit = async (e) => {
@@ -268,22 +328,79 @@ function ProductForm() {
                   ></textarea>
                 </div>
 
-                <Input
-                  label="Image URL"
-                  name="image"
-                  icon={ImageIcon}
-                  value={formData.image}
-                  onChange={handleChange}
-                  placeholder="https://example.com/images/product.jpg (optional)"
-                  helperText="Enter a valid image URL. Live preview is shown on the right."
-                />
+                {/* Image Upload & URL Section */}
+                <div className="space-y-3 p-4 bg-slate-50/80 rounded-2xl border border-[#E5E7EB]">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-[#1F2937]">
+                      Product Imagery
+                    </label>
+                    {(formData.image || imagePreview) && (
+                      <button
+                        type="button"
+                        onClick={handleRemoveImage}
+                        className="text-xs text-rose-600 hover:text-rose-700 flex items-center gap-1 font-semibold cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        <span>Remove image</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* File Upload Button & Dropzone */}
+                  <div className="flex flex-col sm:flex-row items-center gap-3">
+                    <label className="w-full sm:w-auto flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white border-2 border-dashed border-emerald-300 hover:border-[#15803D] hover:bg-emerald-50/50 rounded-xl cursor-pointer transition-all text-xs font-bold text-[#0A4D2E]">
+                      {uploadingImage ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin text-[#15803D]" />
+                          <span>Uploading image...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4 text-[#16A34A]" />
+                          <span>Upload from device</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/avif"
+                        className="hidden"
+                        disabled={uploadingImage}
+                        onChange={handleFileSelect}
+                      />
+                    </label>
+
+                    <span className="text-xs text-slate-400 font-semibold uppercase sm:px-1">or</span>
+
+                    {/* Image URL Input */}
+                    <div className="w-full sm:flex-1">
+                      <Input
+                        name="image"
+                        icon={ImageIcon}
+                        value={formData.image}
+                        onChange={handleChange}
+                        placeholder="Paste image URL (https://...)"
+                        className="text-xs py-2.5"
+                      />
+                    </div>
+                  </div>
+
+                  {formData.imagePublicId && (
+                    <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 font-semibold bg-emerald-100/70 px-2.5 py-1 rounded-lg">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span className="truncate">Cloud storage ID: {formData.imagePublicId}</span>
+                    </div>
+                  )}
+                  <p className="text-[11px] text-slate-500">
+                    Supports JPEG, PNG, WEBP, and AVIF up to 5MB. Cloudinary optimization applied automatically.
+                  </p>
+                </div>
 
                 <div className="flex items-center gap-3 pt-4 border-t border-[#E5E7EB]">
                   <Button
                     type="submit"
                     variant="primary"
                     size="md"
-                    loading={submitting}
+                    loading={submitting || uploadingImage}
                     icon={isEditMode ? Save : PlusCircle}
                   >
                     {isEditMode ? 'Save Changes' : 'Create Product'}
@@ -307,29 +424,20 @@ function ProductForm() {
                 <h4 className="text-xs font-bold uppercase tracking-wider text-[#6B7280] mb-3">
                   Product Image Preview
                 </h4>
-                <div className="w-full h-56 rounded-2xl bg-slate-100 border border-[#E5E7EB] flex items-center justify-center overflow-hidden relative">
-                  {formData.image ? (
-                    <img
-                      src={formData.image}
-                      alt="Preview"
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        e.target.onerror = null;
-                        e.target.style.display = 'none';
-                      }}
-                    />
-                  ) : (
-                    <div className="text-center p-4 text-slate-400">
-                      <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                      <p className="text-xs">No Image URL specified</p>
-                    </div>
-                  )}
+                <div className="w-full rounded-2xl border border-[#E5E7EB] overflow-hidden relative shadow-xs">
+                  <ProductImage
+                    src={imagePreview || formData.imageUrl || formData.image}
+                    alt={formData.name || 'Product Preview'}
+                    category={formData.category}
+                    aspectRatio="square"
+                    className="w-full"
+                  />
                 </div>
 
                 <div className="mt-4 p-4 rounded-xl bg-[#E8F5E9] border border-emerald-200 text-xs text-[#2E7D32] space-y-1">
-                  <p className="font-bold">Master Product Record</p>
+                  <p className="font-bold">Live Visual Presentation</p>
                   <p className="text-slate-600">
-                    This product will be available for batch creation in Step 7.
+                    If no photo is provided, SmartShelf automatically displays a branded {formData.category.toLowerCase()} placeholder.
                   </p>
                 </div>
               </Card>
