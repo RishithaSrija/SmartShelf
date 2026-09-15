@@ -168,7 +168,7 @@ SmartShelf dynamically calculates discounted prices directly against `originalPr
 
 ## Ingredient Basket / "Make Something" System
 
-### Why This Feature Exists (Interview-Friendly Overview)
+### Why This Feature Exists 
 In traditional retail and e-commerce platforms, procurement is entirely item-centric: a chef or store owner must manually search for flour, then ghee, then sugar, guessing which stores have sufficient stock and comparing prices individually. 
 
 Meanwhile, neighborhood grocery stores lose significant margins throwing away short-shelf-life ingredients that are still in prime condition for immediate cooking or baking.
