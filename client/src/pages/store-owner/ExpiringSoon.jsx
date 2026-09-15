@@ -207,7 +207,16 @@ function ExpiringSoon() {
                           <Badge variant={item.status}>{item.status}</Badge>
                         </td>
 
-                        <td className="py-3.5 px-4 text-right space-x-1">
+                        <td className="py-3.5 px-4 text-right space-x-1.5 whitespace-nowrap">
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            className="bg-[#2E7D32] hover:bg-[#1B5E20] text-white text-[11px] py-1 px-2.5 shadow-2xs font-bold"
+                            title="Create Flash Sale / Rescue Deal"
+                            onClick={() => navigate(`/store-owner/flash-sales/create?batchId=${item._id}&productId=${item.productId?._id || item.productId}`)}
+                          >
+                            ⚡ Rescue Deal
+                          </Button>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -257,13 +266,23 @@ function ExpiringSoon() {
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-end gap-1 pt-1">
-                      <Button variant="ghost" size="sm" onClick={() => navigate(`/store-owner/inventory/${item._id}`)}>
-                        <Eye className="w-4 h-4" />
+                    <div className="flex items-center justify-between gap-1 pt-1">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        className="bg-[#2E7D32] hover:bg-[#1B5E20] text-white text-xs py-1 px-3 shadow-2xs font-bold"
+                        onClick={() => navigate(`/store-owner/flash-sales/create?batchId=${item._id}&productId=${item.productId?._id || item.productId}`)}
+                      >
+                        ⚡ Rescue Deal
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => navigate(`/store-owner/inventory/${item._id}/edit`)}>
-                        <Edit3 className="w-4 h-4 text-blue-600" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => navigate(`/store-owner/inventory/${item._id}`)}>
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => navigate(`/store-owner/inventory/${item._id}/edit`)}>
+                          <Edit3 className="w-4 h-4 text-blue-600" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ))}

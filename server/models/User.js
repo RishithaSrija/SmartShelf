@@ -45,6 +45,71 @@ const userSchema = new mongoose.Schema(
         type: [Number], // [longitude, latitude]
         default: [0, 0]
       }
+    },
+    // Intelligent Business & Customer Mode Fields
+    customerType: {
+      type: String,
+      enum: ['personal', 'business'],
+      default: 'personal'
+    },
+    businessProfile: {
+      businessName: {
+        type: String,
+        trim: true
+      },
+      businessType: {
+        type: String,
+        enum: [
+          'Sweet Shop',
+          'Bakery',
+          'Restaurant',
+          'Café',
+          'Caterer',
+          'Cloud Kitchen',
+          'Food Manufacturer',
+          'Grocery / Retail',
+          'Other'
+        ],
+        default: 'Other'
+      },
+      businessSize: {
+        type: String,
+        enum: ['Small', 'Medium', 'Large'],
+        default: 'Small'
+      },
+      preferredQuantity: {
+        type: String,
+        enum: ['small', 'bulk'],
+        default: 'small'
+      },
+      buyingFrequency: {
+        type: String,
+        enum: ['Daily', 'Weekly', 'Biweekly', 'Monthly', 'Occasionally'],
+        default: 'Weekly'
+      },
+      optInDiscovery: {
+        type: Boolean,
+        default: true
+      }
+    },
+    smartPreferences: {
+      categories: {
+        type: [String],
+        default: []
+      },
+      products: {
+        type: [String],
+        default: []
+      },
+      shelfLifePreference: {
+        type: String,
+        enum: ['any', 'short', 'urgent'],
+        default: 'any'
+      },
+      bulkBuying: {
+        type: Boolean,
+        default: false
+      }
     }
   },
   {

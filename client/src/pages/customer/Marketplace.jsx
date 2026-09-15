@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import flashSaleService from '../../services/flashSaleService';
 import geoService from '../../services/geoService';
+import wasteRescueService from '../../services/wasteRescueService';
 import { useAuth } from '../../context/AuthContext';
 import { useLocation } from '../../context/LocationContext';
 
@@ -33,11 +34,16 @@ import {
   Compass,
   ChevronLeft,
   ChevronRight,
-  AlertCircle
+  AlertCircle,
+  Leaf,
+  Boxes,
+  Flame,
+  CheckCircle2
 } from 'lucide-react';
 
 const categories = [
   { id: 'ALL', label: 'All Deals' },
+  { id: 'RESCUE', label: '♻️ Waste Rescue' },
   { id: 'DAIRY', label: 'Dairy & Eggs' },
   { id: 'BAKERY', label: 'Fresh Bakery' },
   { id: 'BEVERAGES', label: 'Beverages' },
@@ -54,6 +60,15 @@ const radiusOptions = [
   { value: 5, label: '5 km' },
   { value: 10, label: '10 km' },
   { value: 25, label: '25 km' }
+];
+
+const smartIntents = [
+  { id: 'intent-dairy', label: '🥛 Dairy Ingredients', query: 'Milk', category: 'DAIRY' },
+  { id: 'intent-sweets', label: '🍬 Sweet Making', query: '', category: 'DAIRY' },
+  { id: 'intent-bakery', label: '🧁 For My Bakery', query: '', category: 'BAKERY' },
+  { id: 'intent-bulk', label: '📦 Bulk Batches', isBulk: true },
+  { id: 'intent-urgent', label: '⚡ Use This Week', sort: 'expiry' },
+  { id: 'intent-rescue', label: '♻️ Waste Rescue', category: 'RESCUE' }
 ];
 
 function Marketplace() {
@@ -83,6 +98,7 @@ function Marketplace() {
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
   const [selectedCategory, setSelectedCategory] = useState(searchParams.get('category') || 'ALL');
   const [sortOption, setSortOption] = useState(searchParams.get('sort') || (isLocationSet ? 'distance' : 'expiry'));
+  const [bulkOnly, setBulkOnly] = useState(false);
   const [page, setPage] = useState(parseInt(searchParams.get('page')) || 1);
 
   // Sync default sort with location state
@@ -96,16 +112,37 @@ function Marketplace() {
     try {
       setLoading(true);
 
+      // Handle dedicated Waste Rescue tab
+      if (selectedCategory === 'RESCUE') {
+        const rescueRes = await wasteRescueService.getWasteRescueDeals({ limit: 16 });
+        if (rescueRes.success && rescueRes.data) {
+          let deals = rescueRes.data.deals || [];
+          if (searchTerm.trim()) {
+            const term = searchTerm.toLowerCase();
+            deals = deals.filter(d =>
+              (d.productId?.name || d.title || '').toLowerCase().includes(term) ||
+              (d.storeId?.name || d.storeName || '').toLowerCase().includes(term)
+            );
+          }
+          if (bulkOnly) {
+            deals = deals.filter(d => (d.availableQuantity || 0) >= 10);
+          }
+          setSales(deals);
+          setPagination({ page: 1, limit: 16, total: deals.length, totalPages: 1 });
+        }
+        setLoading(false);
+        return;
+      }
+
       const baseParams = {
         page,
         limit: 12,
         search: searchTerm.trim() || undefined,
-        category: selectedCategory !== 'ALL' ? selectedCategory : undefined,
+        category: selectedCategory !== 'ALL' && selectedCategory !== 'RESCUE' ? selectedCategory : undefined,
         sort: sortOption
       };
 
       if (isLocationSet) {
-        // Geospatial nearby query
         const nearbyRes = await geoService.getNearbyFlashSales({
           ...baseParams,
           latitude,
@@ -114,15 +151,22 @@ function Marketplace() {
         });
 
         if (nearbyRes.success && nearbyRes.data) {
-          setSales(nearbyRes.data.flashSales || []);
-          setPagination(nearbyRes.data.pagination || { page: 1, limit: 12, total: 0, totalPages: 1 });
+          let fetched = nearbyRes.data.flashSales || [];
+          if (bulkOnly) {
+            fetched = fetched.filter(d => (d.availableQuantity || 0) >= 10);
+          }
+          setSales(fetched);
+          setPagination(nearbyRes.data.pagination || { page: 1, limit: 12, total: fetched.length, totalPages: 1 });
         }
       } else {
-        // Standard public query without fake distances
         const publicRes = await flashSaleService.getPublicFlashSales(baseParams);
         if (publicRes.success && publicRes.data) {
-          setSales(publicRes.data.flashSales || []);
-          setPagination(publicRes.data.pagination || { page: 1, limit: 12, total: 0, totalPages: 1 });
+          let fetched = publicRes.data.flashSales || [];
+          if (bulkOnly) {
+            fetched = fetched.filter(d => (d.availableQuantity || 0) >= 10);
+          }
+          setSales(fetched);
+          setPagination(publicRes.data.pagination || { page: 1, limit: 12, total: fetched.length, totalPages: 1 });
         }
       }
     } catch (err) {
@@ -131,7 +175,7 @@ function Marketplace() {
     } finally {
       setLoading(false);
     }
-  }, [page, searchTerm, selectedCategory, sortOption, isLocationSet, latitude, longitude, radius, addToast]);
+  }, [page, searchTerm, selectedCategory, sortOption, bulkOnly, isLocationSet, latitude, longitude, radius, addToast]);
 
   useEffect(() => {
     fetchDeals();
@@ -141,6 +185,14 @@ function Marketplace() {
     e.preventDefault();
     setPage(1);
     fetchDeals();
+  };
+
+  const handleApplyIntent = (intent) => {
+    if (intent.category) setSelectedCategory(intent.category);
+    if (intent.query !== undefined) setSearchTerm(intent.query);
+    if (intent.isBulk !== undefined) setBulkOnly(intent.isBulk);
+    if (intent.sort) setSortOption(intent.sort);
+    setPage(1);
   };
 
   const handleQuickLocate = async () => {
@@ -166,6 +218,30 @@ function Marketplace() {
     }
   };
 
+  // Helper for lifecycle badges
+  const getDealLifecycle = (deal) => {
+    const p = deal.productId || deal.product || deal;
+    const daysLeft = deal.daysRemaining;
+    const tier = p.perishabilityTier;
+
+    if (daysLeft !== undefined && daysLeft <= 2) {
+      return {
+        label: `⚠️ Use Soon — ${daysLeft === 0 ? 'Today' : daysLeft + 'd left'}`,
+        className: 'bg-amber-100 text-amber-900 border-amber-300'
+      };
+    }
+    if (tier === 'Great for Business Use' || (p.businessUseCases && p.businessUseCases.length > 0)) {
+      return {
+        label: '✨ Great for Business Use',
+        className: 'bg-purple-100 text-purple-900 border-purple-300'
+      };
+    }
+    return {
+      label: '📦 Good for Stocking',
+      className: 'bg-blue-100 text-blue-900 border-blue-300'
+    };
+  };
+
   const getDashboardPath = () => {
     if (!user) return '/login';
     if (user.role === 'STORE_OWNER') return '/store-owner';
@@ -188,7 +264,7 @@ function Marketplace() {
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Search fresh products, bakeries, or store deals..."
+                placeholder="Search fresh products, ingredients, or stores..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 text-xs bg-slate-50 rounded-xl border border-[#E5E7EB] focus:outline-none focus:ring-2 focus:ring-[#2E7D32] focus:bg-white transition-all"
@@ -242,31 +318,49 @@ function Marketplace() {
         </div>
       </header>
 
-      {/* Hero Banner with Location Callout */}
-      <section className="bg-gradient-to-b from-emerald-950 via-emerald-900 to-[#1F2937] text-white py-10 px-4 sm:px-6 lg:px-8 text-center relative overflow-hidden">
+      {/* Hero Banner with Location Callout & Intent Pills */}
+      <section className="bg-gradient-to-b from-emerald-950 via-emerald-900 to-[#1F2937] text-white py-9 px-4 sm:px-6 lg:px-8 text-center relative overflow-hidden">
         <div className="max-w-4xl mx-auto relative z-10 space-y-3">
           <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-800/80 border border-emerald-600/50 text-emerald-300 text-xs font-bold uppercase tracking-wider shadow-xs">
             <Zap className="w-4 h-4 text-emerald-400" />
-            <span>Local Flash Sale Marketplace</span>
+            <span>Local Flash Sale &amp; Waste Rescue Marketplace</span>
           </div>
 
-          <h1 className="text-3xl sm:text-5xl font-black tracking-tight">
-            Flash Sales Near You
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight">
+            Fresh Markdown Deals Near You
           </h1>
 
-          <p className="text-sm sm:text-base text-emerald-100 max-w-xl mx-auto font-medium leading-relaxed">
-            Save money while helping local stores reduce food waste.
+          <p className="text-xs sm:text-sm text-emerald-100 max-w-xl mx-auto font-medium leading-relaxed">
+            "Good food shouldn't become waste." Connect with local stores offering smart discounts before products expire.
           </p>
 
+          {/* Smart Search Intent Pills */}
+          <div className="pt-2">
+            <p className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider mb-2">
+              ⚡ Quick Intent Finder:
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {smartIntents.map((intent) => (
+                <button
+                  key={intent.id}
+                  onClick={() => handleApplyIntent(intent)}
+                  className="px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-xs font-bold text-white transition-all cursor-pointer backdrop-blur-xs shadow-2xs hover:scale-105 active:scale-95"
+                >
+                  {intent.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Location Action Bar in Hero */}
-          <div className="pt-3 flex flex-wrap items-center justify-center gap-2.5">
+          <div className="pt-2 flex flex-wrap items-center justify-center gap-2.5">
             {isLocationSet ? (
-              <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/20 text-xs font-semibold text-emerald-100">
-                <MapPin className="w-4 h-4 text-emerald-400" />
+              <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-md px-4 py-1.5 rounded-2xl border border-white/20 text-xs font-semibold text-emerald-100">
+                <MapPin className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Showing deals within <strong>{radius} km</strong></span>
                 <button
                   onClick={() => setIsLocationModalOpen(true)}
-                  className="underline hover:text-white font-bold ml-1 text-emerald-300"
+                  className="underline hover:text-white font-bold ml-1 text-emerald-300 cursor-pointer"
                 >
                   Change
                 </button>
@@ -298,23 +392,6 @@ function Marketplace() {
               </div>
             )}
           </div>
-
-          {/* Mobile Search Bar */}
-          <form onSubmit={handleSearchSubmit} className="lg:hidden flex items-center gap-2 max-w-md mx-auto pt-2">
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Search deals..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 text-xs text-slate-900 bg-white rounded-xl focus:outline-none"
-              />
-            </div>
-            <Button type="submit" variant="primary" size="sm">
-              Search
-            </Button>
-          </form>
         </div>
       </section>
 
@@ -329,7 +406,7 @@ function Marketplace() {
                 setSelectedCategory(cat.id);
                 setPage(1);
               }}
-              className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+              className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                 selectedCategory === cat.id
                   ? 'bg-[#2E7D32] text-white shadow-md'
                   : 'bg-white border border-[#E5E7EB] text-slate-700 hover:bg-slate-50'
@@ -358,7 +435,7 @@ function Marketplace() {
                     setIsLocationModalOpen(true);
                   }
                 }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   isLocationSet && radius === opt.value
                     ? 'bg-[#2E7D32] text-white shadow-2xs'
                     : 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100'
@@ -367,6 +444,21 @@ function Marketplace() {
                 {opt.label}
               </button>
             ))}
+
+            <button
+              onClick={() => {
+                setBulkOnly(!bulkOnly);
+                setPage(1);
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                bulkOnly
+                  ? 'bg-purple-700 text-white shadow-2xs'
+                  : 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <Boxes className="w-3.5 h-3.5" />
+              <span>Bulk Batches (10+)</span>
+            </button>
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
@@ -377,7 +469,7 @@ function Marketplace() {
                 setSortOption(e.target.value);
                 setPage(1);
               }}
-              className="px-3 py-1.5 text-xs font-bold bg-slate-50 border border-[#E5E7EB] rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E7D32]"
+              className="px-3 py-1.5 text-xs font-bold bg-slate-50 border border-[#E5E7EB] rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E7D32] cursor-pointer"
             >
               {isLocationSet && <option value="distance">Nearest First (Distance)</option>}
               <option value="expiry">Expiring Soonest</option>
@@ -393,11 +485,17 @@ function Marketplace() {
             <h2 className="text-lg sm:text-xl font-extrabold text-[#1F2937] tracking-tight flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-[#2E7D32]" />
               <span>
-                {isLocationSet ? `Deals within ${radius} km` : 'Active Flash Deals'}
+                {selectedCategory === 'RESCUE'
+                  ? '♻️ Waste Rescue Deals (Urgent Food Rescue)'
+                  : isLocationSet
+                  ? `Deals within ${radius} km`
+                  : 'Active Flash Deals'}
               </span>
             </h2>
             <p className="text-xs text-[#6B7280] mt-0.5">
-              {isLocationSet
+              {selectedCategory === 'RESCUE'
+                ? 'High markdown deals on near-expiry batches and excess stock.'
+                : isLocationSet
                 ? `Showing stores near your configured location`
                 : 'Choose your location to see precise distances and nearby stores'}
             </p>
@@ -467,32 +565,43 @@ function Marketplace() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {sales.map((deal) => {
-              const productName = deal.product?.name || deal.title;
-              const storeName = deal.store?.name || 'Local Retailer';
+              const product = deal.productId || deal.product || {};
+              const store = deal.storeId || deal.store || {};
+              const productName = product.name || deal.title || 'Fresh Item';
+              const storeName = store.name || deal.storeName || 'Local Retailer';
               const distanceText = deal.distanceKm !== undefined && deal.distanceKm !== null
                 ? `${deal.distanceKm.toFixed(1)} km`
                 : null;
+              const lifecycle = getDealLifecycle(deal);
+              const dealId = deal._id || deal.id;
 
               return (
                 <Card
-                  key={deal._id || deal.id}
+                  key={dealId}
                   hover
                   padding="p-0"
-                  className="overflow-hidden flex flex-col justify-between group border border-[#E5E7EB] hover:border-emerald-300 bg-white"
+                  className="overflow-hidden flex flex-col justify-between group border border-[#E5E7EB] hover:border-emerald-300 bg-white shadow-xs"
                 >
                   <div>
                     {/* Card Image & Discount Badge Overlay */}
                     <div className="relative h-48 bg-slate-100 flex items-center justify-center overflow-hidden">
                       <ProductImage
-                        src={deal.product?.imageUrl || deal.product?.image}
+                        src={product.imageUrl || product.image || deal.image}
                         alt={productName}
-                        category={deal.product?.category}
+                        category={product.category || deal.category}
                         aspectRatio="wide"
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
 
-                      <div className="absolute top-3 left-3 bg-[#2E7D32] text-white text-[11px] font-black uppercase px-2.5 py-1 rounded-lg shadow-md border border-emerald-400 z-10">
-                        {deal.discountPercentage}% OFF
+                      <div className="absolute top-3 left-3 bg-[#2E7D32] text-white text-[11px] font-black uppercase px-2.5 py-1 rounded-lg shadow-md border border-emerald-400 z-10 flex items-center gap-1">
+                        <Flame className="w-3 h-3" />
+                        <span>{deal.discountPercentage}% OFF</span>
+                      </div>
+
+                      <div className="absolute top-3 right-3 z-10">
+                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md border shadow-2xs backdrop-blur-xs ${lifecycle.className}`}>
+                          {lifecycle.label}
+                        </span>
                       </div>
 
                       <div className="absolute bottom-2 right-2 bg-slate-900/80 backdrop-blur-xs text-white text-[10px] font-extrabold px-2 py-0.5 rounded-md flex items-center gap-1 z-10">
@@ -524,14 +633,26 @@ function Marketplace() {
                         {productName}
                       </h3>
 
-                      <p className="text-xs text-[#6B7280] line-clamp-1">
-                        {deal.title}
-                      </p>
+                      {/* Business Use Cases or Category Pill */}
+                      {product.businessUseCases && product.businessUseCases.length > 0 ? (
+                        <p className="text-[11px] text-purple-700 font-semibold truncate bg-purple-50 px-2 py-0.5 rounded-md">
+                          Popular with: {product.businessUseCases.slice(0, 2).join(' • ')}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-[#6B7280] line-clamp-1">
+                          {deal.title}
+                        </p>
+                      )}
 
                       {/* Pricing Display */}
-                      <div className="flex items-baseline gap-2 pt-1">
-                        <span className="text-lg font-black text-[#2E7D32]">₹{deal.salePrice}</span>
-                        <span className="text-xs text-slate-400 line-through font-bold">₹{deal.originalPrice}</span>
+                      <div className="flex items-baseline justify-between pt-1">
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-lg font-black text-[#2E7D32]">₹{deal.salePrice}</span>
+                          <span className="text-xs text-slate-400 line-through font-bold">₹{deal.originalPrice}</span>
+                        </div>
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                          Save ₹{deal.originalPrice - deal.salePrice}
+                        </span>
                       </div>
 
                       <p className="text-[11px] text-slate-500 font-medium">
@@ -545,10 +666,10 @@ function Marketplace() {
                     <Button
                       variant="primary"
                       size="sm"
-                      className="w-full justify-center text-xs"
-                      onClick={() => navigate(`/marketplace/flash-sales/${deal._id || deal.id}`)}
+                      className="w-full justify-center text-xs bg-[#2E7D32] hover:bg-[#1B5E20] text-white font-bold"
+                      onClick={() => navigate(`/marketplace/flash-sales/${dealId}`)}
                     >
-                      View Deal <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                      Reserve Deal <ArrowRight className="w-3.5 h-3.5 ml-1" />
                     </Button>
                   </div>
                 </Card>

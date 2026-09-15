@@ -27,14 +27,19 @@ import {
   ChevronRight,
   AlertCircle,
   ExternalLink,
-  RotateCcw
+  RotateCcw,
+  ShieldCheck,
+  CreditCard
 } from 'lucide-react';
 
 const statusTabs = [
   { id: 'ALL', label: 'All Orders' },
+  { id: 'WAITING_FOR_STORE_ACCEPTANCE', label: 'Paid • Under Review' },
+  { id: 'ACCEPTED', label: 'Accepted' },
   { id: 'PENDING', label: 'Pending Hold' },
   { id: 'CONFIRMED', label: 'Confirmed' },
   { id: 'COMPLETED', label: 'Completed' },
+  { id: 'REJECTED', label: 'Rejected' },
   { id: 'CANCELLED', label: 'Cancelled' },
   { id: 'EXPIRED', label: 'Expired' }
 ];
@@ -77,16 +82,35 @@ function MyOrders() {
 
   const getStatusBadgeVariant = (status) => {
     switch (status) {
+      case 'ACCEPTED':
       case 'CONFIRMED':
       case 'COMPLETED':
         return 'AVAILABLE';
+      case 'WAITING_FOR_STORE_ACCEPTANCE':
+        return 'warning';
       case 'PENDING':
         return 'info';
+      case 'REJECTED':
       case 'CANCELLED':
       case 'EXPIRED':
         return 'EXPIRED';
       default:
         return 'default';
+    }
+  };
+
+  const getStatusLabel = (status) => {
+    switch (status) {
+      case 'WAITING_FOR_STORE_ACCEPTANCE':
+        return 'Paid • Awaiting Store Review';
+      case 'ACCEPTED':
+        return 'Order Accepted';
+      case 'REJECTED':
+        return 'Rejected & Refunded';
+      case 'PENDING':
+        return 'Hold Active (Pay at Store)';
+      default:
+        return status;
     }
   };
 
@@ -219,18 +243,49 @@ function MyOrders() {
                           {ord.orderNumber}
                         </span>
                         <Badge variant={getStatusBadgeVariant(ord.status)}>
-                          {ord.status}
+                          {getStatusLabel(ord.status)}
                         </Badge>
+                        {ord.paymentMethod === 'ONLINE' ? (
+                          ord.paymentStatus === 'CAPTURED' ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                              <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                              {ord.isDemoPayment || ord.paymentProvider === 'DEMO' ? 'Paid (Demo)' : 'Paid (Razorpay)'}
+                            </span>
+                          ) : ord.paymentStatus === 'REFUNDED' ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
+                              {ord.isDemoPayment || ord.paymentProvider === 'DEMO' ? 'Demo Refunded' : 'Refunded'}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                              {ord.paymentStatus}
+                            </span>
+                          )
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+                            Pay at Store
+                          </span>
+                        )}
                       </div>
 
-                      <h3 className="text-base font-extrabold text-[#1F2937] truncate">
-                        {ord.productName}
+                      <h3 className="text-base font-extrabold text-[#1F2937] truncate flex flex-wrap items-center gap-2">
+                        <span>{ord.productName}</span>
+                        {ord.orderType === 'INGREDIENT_BASKET' && (
+                          <span className="text-[10px] font-black uppercase text-purple-800 bg-purple-100 border border-purple-200 px-2 py-0.5 rounded-md">
+                            🍬 Ingredient Basket: {ord.recipeName || 'Production Batch'}
+                          </span>
+                        )}
                       </h3>
 
                       <p className="text-xs text-[#6B7280] flex items-center gap-1.5 truncate">
                         <Store className="w-3.5 h-3.5 text-[#2E7D32] shrink-0" />
                         <span className="truncate">{ord.storeName}</span>
                       </p>
+
+                      {ord.rejectionReason && (
+                        <p className="text-[11px] text-rose-600 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-100">
+                          <strong>Note:</strong> {ord.rejectionReason} (Amount refunded)
+                        </p>
+                      )}
 
                       <p className="text-xs text-slate-500 font-medium pt-0.5">
                         {ord.quantity} × ₹{ord.unitPrice} • Placed {new Date(ord.createdAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}

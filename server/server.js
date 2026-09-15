@@ -15,6 +15,9 @@ const orderRoutes = require('./routes/orderRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const mlRoutes = require('./routes/mlRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
+const wasteRescueRoutes = require('./routes/wasteRescueRoutes');
+const ingredientBasketRoutes = require('./routes/ingredientBasketRoutes');
 
 const { startExpiryJob } = require('./jobs/expiryJob');
 const { startReservationJob } = require('./jobs/reservationJob');
@@ -42,7 +45,13 @@ app.use(cors({
   },
   credentials: true
 }));
-app.use(express.json());
+
+// Capture raw body for secure webhook signature verification
+app.use(express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -54,6 +63,9 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/admin/jobs', adminJobRoutes);
 app.use('/api/flash-sales', flashSaleRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/waste-rescue', wasteRescueRoutes);
+app.use('/api/ingredient-basket', ingredientBasketRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/ml', mlRoutes);
 app.use('/api/upload', uploadRoutes);

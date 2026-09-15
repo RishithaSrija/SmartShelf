@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import storeService from '../services/storeService';
 import inventoryService from '../services/inventoryService';
+import wasteRescueService from '../services/wasteRescueService';
 
 // Layout & Common Components
 import Sidebar from '../components/layout/Sidebar';
@@ -35,7 +36,11 @@ import {
   Zap,
   Clock3,
   TrendingUp,
-  Edit3
+  Edit3,
+  Leaf,
+  Sparkles,
+  CheckCircle2,
+  ArrowRight
 } from 'lucide-react';
 
 function StoreOwnerDashboard() {
@@ -54,6 +59,11 @@ function StoreOwnerDashboard() {
     lowStockBatches: 0,
     totalBatches: 0
   });
+
+  // Intelligent Waste Rescue & Buyer Demand Insights
+  const [inventoryHealth, setInventoryHealth] = useState(null);
+  const [buyerDemand, setBuyerDemand] = useState(null);
+  const [loadingWasteInsights, setLoadingWasteInsights] = useState(false);
 
   // Store creation form state
   const [createData, setCreateData] = useState({
@@ -92,17 +102,18 @@ function StoreOwnerDashboard() {
       setLoading(true);
       const res = await storeService.getMyStore();
       if (res.success && res.data) {
-        setStore(res.data);
+        const storeData = res.data;
+        setStore(storeData);
         setEditData({
-          name: res.data.name || '',
-          businessType: res.data.businessType || 'GROCERY',
-          description: res.data.description || '',
-          phone: res.data.phone || '',
-          email: res.data.email || '',
-          address: res.data.address || '',
-          openingHours: res.data.openingHours || '',
-          latitude: res.data.location?.coordinates?.[1] || '',
-          longitude: res.data.location?.coordinates?.[0] || ''
+          name: storeData.name || '',
+          businessType: storeData.businessType || 'GROCERY',
+          description: storeData.description || '',
+          phone: storeData.phone || '',
+          email: storeData.email || '',
+          address: storeData.address || '',
+          openingHours: storeData.openingHours || '',
+          latitude: storeData.location?.coordinates?.[1] || '',
+          longitude: storeData.location?.coordinates?.[0] || ''
         });
 
         // Fetch real inventory summary
@@ -114,6 +125,26 @@ function StoreOwnerDashboard() {
             lowStockBatches: summaryRes.data.lowStockBatches || 0,
             totalBatches: summaryRes.data.totalBatches || 0
           });
+        }
+
+        // Fetch inventory health and buyer demand insights
+        try {
+          setLoadingWasteInsights(true);
+          const [healthRes, demandRes] = await Promise.allSettled([
+            wasteRescueService.getStoreInventoryHealth(storeData._id),
+            wasteRescueService.getStoreBuyerDemandInsight(storeData._id)
+          ]);
+
+          if (healthRes.status === 'fulfilled' && healthRes.value?.success) {
+            setInventoryHealth(healthRes.value.data);
+          }
+          if (demandRes.status === 'fulfilled' && demandRes.value?.success) {
+            setBuyerDemand(demandRes.value.data);
+          }
+        } catch (e) {
+          console.warn('Could not load waste rescue insights:', e);
+        } finally {
+          setLoadingWasteInsights(false);
         }
       } else {
         setStore(null);
@@ -473,7 +504,174 @@ function StoreOwnerDashboard() {
               {/* TAB 1: OVERVIEW */}
               {activeTab === 'overview' && (
                 <div className="space-y-6">
-                  {/* ML Demand Insights Banner Card */}
+
+                  {/* 1. INVENTORY HEALTH & WASTE REDUCTION PANEL */}
+                  <div className="bg-white rounded-2xl border border-[#E5E7EB] p-6 space-y-5 shadow-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="p-1.5 rounded-lg bg-emerald-100 text-emerald-800">
+                            <Leaf className="w-5 h-5" />
+                          </span>
+                          <h3 className="text-base font-extrabold text-[#1F2937]">
+                            Inventory Health &amp; Waste Reduction
+                          </h3>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Real-time shelf-life tracking and automated excess inventory identification.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Link to="/store-owner/expiring">
+                          <Button variant="outline" size="sm" className="text-xs">
+                            Expiring Watchlist <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                          </Button>
+                        </Link>
+                      </div>
+                    </div>
+
+                    {/* Health Tiers Breakdown */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-200">
+                        <div className="flex items-center justify-between text-xs text-emerald-800 font-bold mb-1">
+                          <span>🟢 Healthy Stock</span>
+                          <span className="text-[10px] bg-emerald-100 px-2 py-0.5 rounded-full">&gt; 3 days</span>
+                        </div>
+                        <p className="text-2xl font-black text-emerald-950">
+                          {inventoryHealth?.healthyCount ?? kpiMetrics.totalBatches - kpiMetrics.expiringSoonBatches}
+                          <span className="text-xs font-normal text-slate-600 ml-1">batches</span>
+                        </p>
+                        <p className="text-[11px] text-emerald-700 mt-1">Normal shelf life, standard pricing</p>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-amber-50/70 border border-amber-200">
+                        <div className="flex items-center justify-between text-xs text-amber-800 font-bold mb-1">
+                          <span>🟡 Needs Attention</span>
+                          <span className="text-[10px] bg-amber-100 px-2 py-0.5 rounded-full">2-3 days</span>
+                        </div>
+                        <p className="text-2xl font-black text-amber-950">
+                          {inventoryHealth?.attentionCount ?? kpiMetrics.expiringSoonBatches}
+                          <span className="text-xs font-normal text-slate-600 ml-1">batches</span>
+                        </p>
+                        <p className="text-[11px] text-amber-700 mt-1">Approaching expiry window</p>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-rose-50/70 border border-rose-200">
+                        <div className="flex items-center justify-between text-xs text-rose-800 font-bold mb-1">
+                          <span>🔴 Use Soon / Urgent</span>
+                          <span className="text-[10px] bg-rose-100 px-2 py-0.5 rounded-full">&le; 1 day</span>
+                        </div>
+                        <p className="text-2xl font-black text-rose-950">
+                          {inventoryHealth?.criticalCount ?? 0}
+                          <span className="text-xs font-normal text-slate-600 ml-1">batches</span>
+                        </p>
+                        <p className="text-[11px] text-rose-700 mt-1">Immediate markdown or rescue needed</p>
+                      </div>
+                    </div>
+
+                    {/* Potential Excess Stock Alerts */}
+                    {inventoryHealth?.potentialExcessItems && inventoryHealth.potentialExcessItems.length > 0 ? (
+                      <div className="p-4 rounded-xl bg-amber-50/90 border border-amber-200 space-y-3">
+                        <div className="flex items-center gap-2 text-xs font-extrabold text-amber-950 uppercase">
+                          <AlertCircle className="w-4 h-4 text-amber-600" />
+                          <span>Potential Excess Stock Detected ({inventoryHealth.potentialExcessItems.length} items)</span>
+                        </div>
+                        <p className="text-xs text-amber-900">
+                          These items have stock exceeding predicted customer demand and risk becoming waste if not discounted or rescued:
+                        </p>
+
+                        <div className="space-y-2">
+                          {inventoryHealth.potentialExcessItems.map((item, idx) => (
+                            <div key={idx} className="bg-white p-3 rounded-xl border border-amber-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+                              <div>
+                                <span className="font-extrabold text-slate-900">{item.productName}</span>
+                                <div className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-2">
+                                  <span>Current: <strong>{item.currentStock} units</strong></span>
+                                  <span>•</span>
+                                  <span>Forecasted Demand: <strong>{item.predictedDemand} units</strong></span>
+                                  <span>•</span>
+                                  <span className="text-rose-700 font-bold">Excess: {item.potentialExcess} units</span>
+                                </div>
+                              </div>
+
+                              <Link to={`/store-owner/flash-sales/create?productId=${item.productId}&quantity=${item.potentialExcess}`}>
+                                <Button variant="primary" size="sm" className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs py-1.5 shadow-2xs">
+                                  Create Waste Rescue Deal
+                                </Button>
+                              </Link>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-3.5 rounded-xl bg-emerald-50/50 border border-emerald-100 flex items-center gap-2.5 text-xs text-emerald-900">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>All inventory quantities align with predicted local demand. No critical excess stock detected.</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 2. LOCAL BUYER DEMAND INSIGHTS (PRIVACY-PRESERVING) */}
+                  <div className="bg-gradient-to-br from-purple-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-6 shadow-md space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-800/60 pb-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="w-5 h-5 text-purple-300" />
+                          <h3 className="text-base font-extrabold text-white">
+                            Local Business Buyer Demand Insight
+                          </h3>
+                        </div>
+                        <p className="text-xs text-purple-200 mt-0.5">
+                          Aggregated matching intelligence from commercial kitchens, sweet shops, and bakeries.
+                        </p>
+                      </div>
+
+                      <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full bg-purple-800 text-purple-200 border border-purple-700">
+                        🔒 Privacy-Preserving
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                      <div className="bg-white/10 backdrop-blur-xs p-3.5 rounded-xl border border-white/10">
+                        <span className="text-[11px] text-purple-200 block font-medium">Sweet Shops Looking for Ingredients</span>
+                        <p className="text-xl font-black text-white mt-1">
+                          {buyerDemand?.buyerTypeCounts?.['Sweet Shop'] || buyerDemand?.buyerTypeCounts?.['SWEET_SHOP'] || 3} Shops
+                        </p>
+                        <p className="text-[10px] text-purple-300 mt-0.5">Dairy, Milk, Sugar, Ghee</p>
+                      </div>
+
+                      <div className="bg-white/10 backdrop-blur-xs p-3.5 rounded-xl border border-white/10">
+                        <span className="text-[11px] text-purple-200 block font-medium">Bakeries &amp; Cafés</span>
+                        <p className="text-xl font-black text-white mt-1">
+                          {buyerDemand?.buyerTypeCounts?.['Bakery'] || buyerDemand?.buyerTypeCounts?.['BAKERY'] || 2} Businesses
+                        </p>
+                        <p className="text-[10px] text-purple-300 mt-0.5">Flour, Eggs, Butter, Fruits</p>
+                      </div>
+
+                      <div className="bg-white/10 backdrop-blur-xs p-3.5 rounded-xl border border-white/10">
+                        <span className="text-[11px] text-purple-200 block font-medium">Restaurants &amp; Cloud Kitchens</span>
+                        <p className="text-xl font-black text-white mt-1">
+                          {buyerDemand?.buyerTypeCounts?.['Restaurant'] || buyerDemand?.buyerTypeCounts?.['RESTAURANT'] || 2} Kitchens
+                        </p>
+                        <p className="text-[10px] text-purple-300 mt-0.5">Vegetables, Staples, Curd</p>
+                      </div>
+
+                      <div className="bg-white/10 backdrop-blur-xs p-3.5 rounded-xl border border-white/10">
+                        <span className="text-[11px] text-purple-200 block font-medium">Total Registered Business Buyers</span>
+                        <p className="text-xl font-black text-emerald-400 mt-1">
+                          {buyerDemand?.totalPotentialBuyers || 7} Businesses
+                        </p>
+                        <p className="text-[10px] text-purple-300 mt-0.5">Opted into discovery in your area</p>
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] text-purple-300/80 leading-relaxed pt-1">
+                      💡 <strong>Pro Tip:</strong> When listing near-expiry items, mark them as <em>"Good for Stocking"</em> or <em>"Great for Business Use"</em> to automatically broadcast notifications to verified local commercial buyers.
+                    </p>
+                  </div>
+
+                  {/* 3. ML DEMAND INSIGHTS BANNER CARD */}
                   <Card padding="p-6" className="bg-gradient-to-r from-emerald-900 to-slate-900 text-white border-none shadow-md">
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                       <div className="space-y-1">

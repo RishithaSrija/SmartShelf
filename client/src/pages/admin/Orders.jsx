@@ -17,14 +17,19 @@ import {
   Clock3,
   RotateCcw,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  ShieldCheck,
+  CreditCard
 } from 'lucide-react';
 
 const statusTabs = [
   { id: 'ALL', label: 'All Orders' },
+  { id: 'WAITING_FOR_STORE_ACCEPTANCE', label: 'Paid (Awaiting Store)' },
+  { id: 'ACCEPTED', label: 'Accepted' },
   { id: 'PENDING', label: 'Pending Hold' },
   { id: 'CONFIRMED', label: 'Confirmed' },
   { id: 'COMPLETED', label: 'Completed' },
+  { id: 'REJECTED', label: 'Rejected' },
   { id: 'CANCELLED', label: 'Cancelled' },
   { id: 'EXPIRED', label: 'Expired' }
 ];
@@ -69,11 +74,15 @@ function AdminOrders() {
 
   const getStatusBadgeVariant = (status) => {
     switch (status) {
+      case 'ACCEPTED':
       case 'CONFIRMED':
       case 'COMPLETED':
         return 'AVAILABLE';
+      case 'WAITING_FOR_STORE_ACCEPTANCE':
+        return 'warning';
       case 'PENDING':
         return 'info';
+      case 'REJECTED':
       case 'CANCELLED':
       case 'EXPIRED':
         return 'EXPIRED';
@@ -186,6 +195,7 @@ function AdminOrders() {
                         <th className="p-4">Product</th>
                         <th className="p-4">Qty</th>
                         <th className="p-4">Total</th>
+                        <th className="p-4">Payment</th>
                         <th className="p-4">Status</th>
                         <th className="p-4">Placed At</th>
                       </tr>
@@ -217,6 +227,58 @@ function AdminOrders() {
                           </td>
                           <td className="p-4 font-black text-[#2E7D32]">
                             ₹{ord.totalPrice}
+                          </td>
+                          <td className="p-4">
+                            <div className="space-y-0.5">
+                              {ord.paymentMethod === 'ONLINE' ? (
+                                <>
+                                  <span
+                                    className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                      ord.paymentStatus === 'CAPTURED'
+                                        ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                                        : ord.paymentStatus === 'REFUNDED'
+                                        ? 'text-purple-700 bg-purple-50 border-purple-200'
+                                        : 'text-amber-700 bg-amber-50 border-amber-200'
+                                    }`}
+                                  >
+                                    <ShieldCheck className="w-3 h-3 shrink-0" />
+                                    {ord.paymentStatus === 'CAPTURED'
+                                      ? (ord.isDemoPayment || ord.paymentProvider === 'DEMO' ? 'Paid (Demo)' : 'Paid (Razorpay)')
+                                      : ord.paymentStatus === 'REFUNDED'
+                                      ? (ord.isDemoPayment || ord.paymentProvider === 'DEMO' ? 'Demo Refunded' : 'Refunded')
+                                      : ord.paymentStatus}
+                                  </span>
+                                  {ord.demoPaymentDetails?.transactionId && (
+                                    <p
+                                      className="font-mono text-[9px] text-slate-400 truncate max-w-[120px]"
+                                      title={`Demo Transaction: ${ord.demoPaymentDetails.transactionId}`}
+                                    >
+                                      {ord.demoPaymentDetails.transactionId}
+                                    </p>
+                                  )}
+                                  {ord.razorpayPaymentId && (
+                                    <p
+                                      className="font-mono text-[9px] text-slate-400 truncate max-w-[120px]"
+                                      title={`Razorpay Payment ID: ${ord.razorpayPaymentId}`}
+                                    >
+                                      {ord.razorpayPaymentId}
+                                    </p>
+                                  )}
+                                  {ord.refundId && (
+                                    <p
+                                      className="font-mono text-[9px] text-purple-600 truncate max-w-[120px]"
+                                      title={`Refund ID: ${ord.refundId}`}
+                                    >
+                                      Ref: {ord.refundId} (₹{ord.refundAmount || ord.totalPrice})
+                                    </p>
+                                  )}
+                                </>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+                                  Pay at Store
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="p-4">
                             <Badge variant={getStatusBadgeVariant(ord.status)}>

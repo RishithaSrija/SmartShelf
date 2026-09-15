@@ -53,6 +53,7 @@ import FlashSaleDetails from './pages/customer/FlashSaleDetails';
 import MyOrders from './pages/customer/MyOrders';
 import CustomerOrderDetail from './pages/customer/OrderDetails';
 import ReservationSuccess from './pages/customer/ReservationSuccess';
+import MakeSomething from './pages/customer/MakeSomething';
 
 // Lucide Icons
 import { ShieldCheck, Zap, Layers, Sparkles, ArrowRight, UserCheck, LogOut, Clock3, ShoppingBag, MapPin, Receipt } from 'lucide-react';
@@ -185,6 +186,15 @@ export default function App() {
                 element={
                   <ProtectedRoute allowedRoles={['CUSTOMER']}>
                     <CustomerDashboard />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/customer/make-something"
+                element={
+                  <ProtectedRoute allowedRoles={['CUSTOMER']}>
+                    <MakeSomething />
                   </ProtectedRoute>
                 }
               />

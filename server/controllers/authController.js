@@ -102,7 +102,10 @@ const register = async (req, res) => {
           name: user.name,
           email: user.email,
           role: user.role,
-          phone: user.phone || ''
+          phone: user.phone || '',
+          customerType: user.customerType || 'personal',
+          businessProfile: user.businessProfile || {},
+          smartPreferences: user.smartPreferences || { categories: [], products: [], shelfLifePreference: 'any', bulkBuying: false }
         },
         token
       }
@@ -169,7 +172,10 @@ const login = async (req, res) => {
           name: user.name,
           email: user.email,
           role: user.role,
-          phone: user.phone || ''
+          phone: user.phone || '',
+          customerType: user.customerType || 'personal',
+          businessProfile: user.businessProfile || {},
+          smartPreferences: user.smartPreferences || { categories: [], products: [], shelfLifePreference: 'any', bulkBuying: false }
         },
         token
       }
@@ -195,7 +201,10 @@ const getCurrentUser = async (req, res) => {
         name: req.user.name,
         email: req.user.email,
         role: req.user.role,
-        phone: req.user.phone || ''
+        phone: req.user.phone || '',
+        customerType: req.user.customerType || 'personal',
+        businessProfile: req.user.businessProfile || {},
+        smartPreferences: req.user.smartPreferences || { categories: [], products: [], shelfLifePreference: 'any', bulkBuying: false }
       }
     });
   } catch (error) {
@@ -207,8 +216,67 @@ const getCurrentUser = async (req, res) => {
   }
 };
 
+// @desc    Update customer type and smart preferences
+// @route   PUT /api/auth/preferences
+// @access  Private
+const updatePreferences = async (req, res) => {
+  try {
+    const { customerType, businessProfile, smartPreferences } = req.body;
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    if (customerType && ['personal', 'business'].includes(customerType)) {
+      user.customerType = customerType;
+    }
+
+    if (businessProfile && typeof businessProfile === 'object') {
+      user.businessProfile = {
+        ...(user.businessProfile ? user.businessProfile.toObject() : {}),
+        ...businessProfile
+      };
+    }
+
+    if (smartPreferences && typeof smartPreferences === 'object') {
+      user.smartPreferences = {
+        ...(user.smartPreferences ? user.smartPreferences.toObject() : {}),
+        ...smartPreferences
+      };
+    }
+
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Preferences updated successfully',
+      data: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone || '',
+        customerType: user.customerType || 'personal',
+        businessProfile: user.businessProfile || {},
+        smartPreferences: user.smartPreferences || { categories: [], products: [], shelfLifePreference: 'any', bulkBuying: false }
+      }
+    });
+  } catch (error) {
+    console.error('[AuthController] updatePreferences error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error updating preferences'
+    });
+  }
+};
+
 module.exports = {
   register,
   login,
-  getCurrentUser
+  getCurrentUser,
+  updatePreferences
 };

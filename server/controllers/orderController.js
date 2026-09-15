@@ -155,6 +155,51 @@ const updateStoreOrderStatus = async (req, res) => {
   }
 };
 
+// @desc    Store Owner accepts incoming order
+// @route   POST /api/orders/store/:id/accept or POST /api/orders/:id/accept
+// @access  Private (STORE_OWNER, ADMIN)
+const acceptOrder = async (req, res) => {
+  try {
+    const order = await orderService.acceptStoreOrder(req.user._id, req.params.id);
+    return res.status(200).json({
+      success: true,
+      message: 'Order accepted successfully',
+      data: order
+    });
+  } catch (error) {
+    console.error('[OrderController] acceptOrder error:', error.message);
+    return res.status(error.statusCode || 400).json({
+      success: false,
+      message: error.message || 'Unable to accept order'
+    });
+  }
+};
+
+// @desc    Store Owner rejects incoming order & initiates refund if paid
+// @route   POST /api/orders/store/:id/reject or POST /api/orders/:id/reject
+// @access  Private (STORE_OWNER, ADMIN)
+const rejectOrder = async (req, res) => {
+  try {
+    const { reason } = req.body;
+    const order = await orderService.rejectStoreOrder(
+      req.user._id,
+      req.params.id,
+      reason || 'Rejected by store owner'
+    );
+    return res.status(200).json({
+      success: true,
+      message: 'Order rejected and refund initiated if applicable',
+      data: order
+    });
+  } catch (error) {
+    console.error('[OrderController] rejectOrder error:', error.message);
+    return res.status(error.statusCode || 400).json({
+      success: false,
+      message: error.message || 'Unable to reject order'
+    });
+  }
+};
+
 module.exports = {
   createOrder,
   getMyOrders,
@@ -162,5 +207,8 @@ module.exports = {
   cancelOrder,
   getStoreOrders,
   getStoreOrderById,
-  updateStoreOrderStatus
+  updateStoreOrderStatus,
+  acceptOrder,
+  rejectOrder
 };
+

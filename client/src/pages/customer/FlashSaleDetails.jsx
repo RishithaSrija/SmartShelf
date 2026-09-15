@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import flashSaleService from '../../services/flashSaleService';
 import orderService from '../../services/orderService';
+import paymentService, { loadRazorpayScript } from '../../services/paymentService';
 import { useAuth } from '../../context/AuthContext';
 
 // Layout & UI Components
@@ -12,6 +13,7 @@ import Badge from '../../components/ui/Badge';
 import Skeleton from '../../components/ui/Skeleton';
 import { useToast } from '../../components/ui/Toast';
 import ProductImage from '../../components/common/ProductImage';
+import DemoPaymentModal from '../../components/payment/DemoPaymentModal';
 
 // Icons
 import {
@@ -29,23 +31,30 @@ import {
   X,
   Minus,
   Plus,
-  AlertCircle
+  AlertCircle,
+  CreditCard,
+  Lock,
+  Banknote
 } from 'lucide-react';
 
 function FlashSaleDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const { addToast } = useToast();
+
 
   const [deal, setDeal] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Reservation Modal State
+  // Reservation & Payment Modal State
   const [isReserveModalOpen, setIsReserveModalOpen] = useState(false);
   const [reserveQty, setReserveQty] = useState(1);
+  const [paymentMethod, setPaymentMethod] = useState('ONLINE'); // 'ONLINE' or 'PAY_AT_STORE'
   const [isReserving, setIsReserving] = useState(false);
   const [reserveError, setReserveError] = useState('');
+  const [demoPaymentOrder, setDemoPaymentOrder] = useState(null);
+  const [isDemoPaymentOpen, setIsDemoPaymentOpen] = useState(false);
 
   const fetchDeal = useCallback(async () => {
     try {
@@ -73,6 +82,7 @@ function FlashSaleDetails() {
       return;
     }
     setReserveQty(1);
+    setPaymentMethod('ONLINE');
     setReserveError('');
     setIsReserveModalOpen(true);
   };
@@ -104,9 +114,106 @@ function FlashSaleDetails() {
 
     try {
       setIsReserving(true);
+
+      // 1. ONLINE PAYMENT FLOW
+      if (paymentMethod === 'ONLINE') {
+        const scriptLoaded = await loadRazorpayScript();
+        if (!scriptLoaded) {
+          throw new Error('Could not load Razorpay payment gateway. Please check your internet connection or choose Cash on Delivery.');
+        }
+
+        const res = await orderService.createOrder({
+          flashSaleId: deal._id || deal.id,
+          quantity: reserveQty,
+          paymentMethod: 'ONLINE'
+        });
+
+        if (!res.success || !res.data) {
+          throw new Error(res.message || 'Failed to initialize payment');
+        }
+
+        const createdOrder = res.data;
+        const isDemo = createdOrder.isDemoPayment || createdOrder.demoPayment || !createdOrder.razorpay?.orderId;
+
+        if (isDemo) {
+          setIsReserving(false);
+          setIsReserveModalOpen(false);
+          setDemoPaymentOrder(createdOrder);
+          setIsDemoPaymentOpen(true);
+          return;
+        }
+
+        const razorpayInfo = createdOrder.razorpay || {};
+        const razorpayKey = razorpayInfo.keyId || (await paymentService.getRazorpayKey());
+
+        const options = {
+          key: razorpayKey,
+          amount: razorpayInfo.amount || Math.round(deal.salePrice * reserveQty * 100),
+          currency: razorpayInfo.currency || 'INR',
+          name: 'SmartShelf',
+          description: `${deal.title} (Qty: ${reserveQty})`,
+          order_id: razorpayInfo.orderId,
+          prefill: {
+            name: user?.name || '',
+            email: user?.email || '',
+            contact: user?.phone || ''
+          },
+          theme: {
+            color: '#2E7D32'
+          },
+          handler: async function (response) {
+            try {
+              setIsReserving(true);
+              const verifyRes = await paymentService.verifyPayment({
+                orderId: createdOrder._id || createdOrder.id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature
+              });
+
+              if (verifyRes.success) {
+                addToast('Payment verified successfully! Order sent to store.', 'success');
+                setIsReserveModalOpen(false);
+                navigate(`/orders/${createdOrder._id || createdOrder.id}`);
+              }
+            } catch (err) {
+              console.error('[FlashSaleDetails] Verification error:', err);
+              const msg = err.response?.data?.message || 'Payment verification failed.';
+              addToast(msg, 'error');
+              setIsReserveModalOpen(false);
+              navigate(`/orders/${createdOrder._id || createdOrder.id}`);
+            } finally {
+              setIsReserving(false);
+            }
+          },
+          modal: {
+            ondismiss: function () {
+              setIsReserving(false);
+              addToast('Payment cancelled. You can complete it from your orders dashboard.', 'info');
+              setIsReserveModalOpen(false);
+              navigate(`/orders/${createdOrder._id || createdOrder.id}`);
+            }
+          }
+        };
+
+        if (window.Razorpay) {
+          const rzp = new window.Razorpay(options);
+          rzp.on('payment.failed', function (resp) {
+            addToast(resp.error?.description || 'Payment failed', 'error');
+            setIsReserving(false);
+          });
+          rzp.open();
+        } else {
+          throw new Error('Razorpay SDK is not available');
+        }
+        return;
+      }
+
+      // 2. CASH ON DELIVERY / PAY AT STORE FLOW
       const res = await orderService.createOrder({
         flashSaleId: deal._id || deal.id,
-        quantity: reserveQty
+        quantity: reserveQty,
+        paymentMethod: 'PAY_AT_STORE'
       });
 
       if (res.success && res.data) {
@@ -115,11 +222,14 @@ function FlashSaleDetails() {
         navigate(`/orders/success/${res.data._id || res.data.id}`);
       }
     } catch (err) {
-      const msg = err.response?.data?.message || err.message || 'Failed to reserve deal.';
+      const msg = err.response?.data?.message || err.message || 'Failed to process order.';
       setReserveError(msg);
       addToast(msg, 'error');
     } finally {
-      setIsReserving(false);
+      // For online payment, isReserving stays true while modal is opening
+      if (paymentMethod !== 'ONLINE') {
+        setIsReserving(false);
+      }
     }
   };
 
@@ -197,10 +307,65 @@ function FlashSaleDetails() {
                     Category: <span className="font-bold text-slate-800">{deal.productId?.category}</span> • Unit: <span className="font-bold text-slate-800">{deal.productId?.unit}</span>
                   </p>
 
+                  {/* Product Lifecycle Badge */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <span className={`text-xs font-black px-3 py-1 rounded-xl border flex items-center gap-1.5 ${
+                      deal.daysRemaining <= 2
+                        ? 'bg-amber-50 text-amber-900 border-amber-200'
+                        : 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                    }`}>
+                      <Clock className="w-3.5 h-3.5" />
+                      <span>
+                        {deal.daysRemaining <= 2
+                          ? `Use Soon — ${deal.daysRemaining === 0 ? 'Expires Today' : deal.daysRemaining + ' days left'}`
+                          : 'Good for Stocking & Processing'}
+                      </span>
+                    </span>
+
+                    {deal.productId?.perishabilityTier && (
+                      <span className="text-xs font-bold px-3 py-1 rounded-xl bg-purple-50 text-purple-900 border border-purple-200">
+                        {deal.productId.perishabilityTier}
+                      </span>
+                    )}
+                  </div>
+
                   <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-700 leading-relaxed">
                     <h4 className="font-bold text-slate-900 mb-1">Deal Description</h4>
                     <p>{deal.description || deal.productId?.description || 'Fresh item offered at a special discount prior to expiry.'}</p>
                   </div>
+
+                  {/* Business Applications & Common Uses Card */}
+                  {(deal.productId?.businessUseCases?.length > 0 || deal.productId?.commonUses?.length > 0) && (
+                    <div className="p-5 rounded-2xl bg-gradient-to-br from-purple-50 via-indigo-50/50 to-white border border-purple-200/80 space-y-2.5">
+                      <div className="flex items-center gap-2 text-xs font-black uppercase text-purple-900 tracking-wider">
+                        <Building className="w-4 h-4 text-purple-700" />
+                        <span>Business & Commercial Utilization</span>
+                      </div>
+                      <p className="text-xs text-slate-600">
+                        This item can be processed, cooked, or transformed by local businesses before expiry:
+                      </p>
+
+                      {deal.productId?.businessUseCases?.length > 0 && (
+                        <div className="pt-1">
+                          <span className="text-[11px] font-bold text-slate-500 block mb-1">Ideal for:</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {deal.productId.businessUseCases.map((useCase, idx) => (
+                              <span key={idx} className="bg-white px-2.5 py-1 rounded-lg border border-purple-200 text-purple-900 text-xs font-bold shadow-2xs">
+                                🏪 {useCase}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {deal.productId?.commonUses?.length > 0 && (
+                        <div className="pt-1 text-xs text-slate-700">
+                          <span className="font-bold text-slate-900">Common uses: </span>
+                          <span>{deal.productId.commonUses.join(', ')}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </Card>
             </div>
@@ -381,26 +546,91 @@ function FlashSaleDetails() {
               {/* Price Calculation Box */}
               <div className="p-3.5 rounded-xl bg-emerald-50/75 border border-emerald-200 space-y-1.5 text-xs">
                 <div className="flex justify-between text-slate-600">
-                  <span>Unit Price:</span>
-                  <span className="font-semibold">₹{deal.salePrice}</span>
+                  <span>Subtotal ({reserveQty} items):</span>
+                  <span className="line-through text-slate-400">₹{(deal.originalPrice * reserveQty).toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-slate-600">
-                  <span>Quantity:</span>
-                  <span className="font-semibold">{reserveQty}</span>
+                <div className="flex justify-between text-[#2E7D32] font-semibold">
+                  <span>Flash Sale Discount ({deal.discountPercentage}%):</span>
+                  <span>-₹{((deal.originalPrice - deal.salePrice) * reserveQty).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm font-black text-[#2E7D32] pt-1.5 border-t border-emerald-200">
-                  <span>Total Due at Store:</span>
-                  <span>₹{(deal.salePrice * reserveQty).toFixed(2)}</span>
+                  <span>Total Due:</span>
+                  <span className="text-base font-black">₹{(deal.salePrice * reserveQty).toFixed(2)}</span>
                 </div>
               </div>
 
-              {/* Disclaimer */}
-              <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px]">
-                <Clock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <span>
-                  Your reservation will hold this inventory for <strong>30 minutes</strong>. Please collect and pay at the store before expiry.
-                </span>
+              {/* Payment Method Selector */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Payment Method
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('ONLINE')}
+                    className={`p-3 rounded-xl border text-left flex items-start gap-2.5 transition-all ${
+                      paymentMethod === 'ONLINE'
+                        ? 'border-[#2E7D32] bg-[#E8F5E9]/50 text-[#1F2937] ring-1 ring-[#2E7D32]'
+                        : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-600'
+                    }`}
+                  >
+                    <div className={`w-4 h-4 rounded-full border mt-0.5 flex items-center justify-center ${
+                      paymentMethod === 'ONLINE' ? 'border-[#2E7D32]' : 'border-slate-300'
+                    }`}>
+                      {paymentMethod === 'ONLINE' && <div className="w-2 h-2 rounded-full bg-[#2E7D32]" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1 font-bold text-xs">
+                        <CreditCard className="w-3.5 h-3.5 text-[#2E7D32]" />
+                        <span>Pay Online</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-0.5 leading-tight">
+                        UPI, Cards, Netbanking via Razorpay
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('PAY_AT_STORE')}
+                    className={`p-3 rounded-xl border text-left flex items-start gap-2.5 transition-all ${
+                      paymentMethod === 'PAY_AT_STORE'
+                        ? 'border-[#2E7D32] bg-[#E8F5E9]/50 text-[#1F2937] ring-1 ring-[#2E7D32]'
+                        : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-600'
+                    }`}
+                  >
+                    <div className={`w-4 h-4 rounded-full border mt-0.5 flex items-center justify-center ${
+                      paymentMethod === 'PAY_AT_STORE' ? 'border-[#2E7D32]' : 'border-slate-300'
+                    }`}>
+                      {paymentMethod === 'PAY_AT_STORE' && <div className="w-2 h-2 rounded-full bg-[#2E7D32]" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1 font-bold text-xs">
+                        <Banknote className="w-3.5 h-3.5 text-slate-600" />
+                        <span>Pay at Store</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-0.5 leading-tight">
+                        Cash on Delivery (30-min hold)
+                      </p>
+                    </div>
+                  </button>
+                </div>
               </div>
+
+              {/* Context Note / Disclaimer */}
+              {paymentMethod === 'ONLINE' ? (
+                <div className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-[11px]">
+                  <Lock className="w-3.5 h-3.5 text-[#2E7D32]" />
+                  <span>Secure payment powered by <strong>Razorpay</strong></span>
+                </div>
+              ) : (
+                <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px]">
+                  <Clock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <span>
+                    Your reservation holds inventory for <strong>30 minutes</strong>. Pay upon pickup at the store.
+                  </span>
+                </div>
+              )}
 
               {/* Actions */}
               <div className="flex items-center gap-2 pt-2">
@@ -419,15 +649,41 @@ function FlashSaleDetails() {
                   variant="primary"
                   size="md"
                   loading={isReserving}
-                  className="flex-1 justify-center"
+                  className="flex-1 justify-center font-bold"
                 >
-                  {isReserving ? 'Reserving...' : 'Confirm Reservation'}
+                  {isReserving
+                    ? 'Processing...'
+                    : paymentMethod === 'ONLINE'
+                    ? `Pay Securely ₹${(deal.salePrice * reserveQty).toFixed(2)}`
+                    : 'Confirm 30-Min Hold'}
                 </Button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* Demo Payment Modal */}
+      <DemoPaymentModal
+        isOpen={isDemoPaymentOpen}
+        onClose={() => {
+          setIsDemoPaymentOpen(false);
+          if (demoPaymentOrder) {
+            navigate(`/orders/${demoPaymentOrder._id || demoPaymentOrder.id}`);
+          }
+        }}
+        order={demoPaymentOrder}
+        onSuccess={(updatedOrder) => {
+          setIsDemoPaymentOpen(false);
+          addToast('Simulated payment captured! Order sent to store.', 'success');
+          navigate(`/orders/${updatedOrder._id || updatedOrder.id}`);
+        }}
+        onFailure={(updatedOrder) => {
+          setIsDemoPaymentOpen(false);
+          addToast('Payment declined. You can retry from your orders dashboard.', 'info');
+          navigate(`/orders/${updatedOrder._id || updatedOrder.id}`);
+        }}
+      />
     </div>
   );
 }
